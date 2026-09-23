@@ -3,19 +3,23 @@
 > **Business question:** Criteo ran a randomized ad-incrementality test. How many *extra* visits and
 > conversions do ads actually cause, which users respond best, and who should we target?
 
-**Status:** 🚧 in progress — Steps 1–2 of 7 done.
+**Status:** 🚧 in progress — Steps 1–3 of 7 done.
 
 | Step | What | Status | Report |
 |---|---|---|---|
 | 1 | PySpark ingestion, data-quality profile, Parquet | ✅ | [01_data_profile.md](reports/01_data_profile.md) |
 | 2 | Experiment validity: SRM test, covariate balance | ✅ | [02_validity.md](reports/02_validity.md) |
-| 3 | Core A/B analysis: z-test + bootstrap CIs for visit & conversion | ⏳ | |
+| 3 | Core A/B analysis: z-test + bootstrap CIs for visit & conversion | ✅ | [03_ab_results.md](reports/03_ab_results.md) |
 | 4 | Power & minimum detectable effect | ⏳ | |
 | 5 | Assignment vs. exposure: ITT vs. CACE | ⏳ | |
 | 6 | Heterogeneous effects & T-learner uplift model (Qini) | ⏳ | |
 | 7 | Streamlit dashboard & write-up | ⏳ | |
 
 ## Key results so far
+
+> **Headline:** Ads lift the visit rate by **+27.1%** (95% CI 26.2–28.0%) and the conversion rate by
+> **+59.4%** (95% CI 54.4–64.7%) — about **123K incremental visits** and **13.7K incremental
+> conversions** across 11.9M users assigned to see ads. Randomisation checks pass.
 
 ### 1. Data: 13.98M users, clean, processed in ~60s with PySpark
 - **13,979,592** users; **0** missing values; all binary columns valid.
@@ -39,6 +43,25 @@
 
 ![Covariate balance](reports/figures/02_covariate_balance.png)
 
+### 3. Ads cause +27% visits and +59% conversions (intent-to-treat)
+
+| Metric | Control | Treatment | Abs. lift | Rel. lift (95% CI) | p-value |
+|---|---|---|---|---|---|
+| Visit | 3.820% | 4.854% | +1.034 pp | **+27.1%** (26.2%, 28.0%) | < 1e-300 |
+| Conversion | 0.194% | 0.309% | +0.115 pp | **+59.4%** (54.4%, 64.7%) | 7e-179 |
+
+- **Two methods, same answer:** two-proportion z-test (delta-method CI for relative lift) and a
+  10,000-replicate bootstrap agree to within 0.2 percentage points of lift.
+- **Efficient bootstrap:** with binary outcomes and i.i.d. users, resampling *n* users gives a
+  Binomial(*n*, p̂) success count, so replicates are drawn from that distribution — equivalent to a
+  row-level bootstrap without rescanning 14M rows 10,000 times.
+- **Signal vs noise:** conversion is ~20× rarer than a visit, so its relative-lift CI is ~5.6×
+  wider (10.3 vs 1.8 pts). Visit is the sharper signal; conversion is the business outcome.
+- These are **intent-to-treat** effects: only ~3.6% of assigned users actually saw an ad, so the
+  effect on users who *were* exposed is much larger (Step 5).
+
+![Relative lift with 95% CIs](reports/figures/03_lift_ci.png)
+
 ## Data
 
 [Criteo Uplift Prediction Dataset v2.1](https://huggingface.co/datasets/criteo/criteo-uplift):
@@ -53,7 +76,8 @@ redistributed in this repo — `scripts/00_download_data.sh` fetches it.
 │   ├── 00_download_data.sh        # fetch raw data from Hugging Face
 │   ├── make_sample_data.py        # tiny synthetic file with the same schema (for quick runs / CI)
 │   ├── 01_ingest_and_profile.py   # Step 1: PySpark ingest -> profile -> Parquet
-│   └── 02_validity_checks.py      # Step 2: SRM chi-square test + covariate balance (SMD)
+│   ├── 02_validity_checks.py      # Step 2: SRM chi-square test + covariate balance (SMD)
+│   └── 03_ab_analysis.py          # Step 3: z-tests, delta-method & bootstrap CIs
 ├── src/criteo_ab/spark.py         # SparkSession factory + explicit schema
 ├── reports/                       # generated reports and figures
 └── data/{raw,processed}/          # git-ignored
@@ -72,11 +96,13 @@ pip install -r requirements.txt
 bash scripts/00_download_data.sh
 python scripts/01_ingest_and_profile.py
 python scripts/02_validity_checks.py
+python scripts/03_ab_analysis.py
 
 # or: synthetic sample, runs in ~30s (numbers are NOT real results)
 python scripts/make_sample_data.py
 python scripts/01_ingest_and_profile.py --input data/raw/sample.csv.gz
 python scripts/02_validity_checks.py
+python scripts/03_ab_analysis.py
 ```
 
 ### Why Spark for 14M rows?
