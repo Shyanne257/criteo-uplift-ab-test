@@ -1,0 +1,22 @@
+# data is large and licensed separately - never commit it
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# python / env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# spark
+spark-warehouse/
+metastore_db/
+derby.log
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
