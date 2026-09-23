@@ -1,0 +1,207 @@
+{
+  "baseline": {
+    "visit": {
+      "p_t": 0.048543360048743316,
+      "p_c": 0.03820095691954503,
+      "rel_lift": 0.27073675539019604
+    },
+    "conversion": {
+      "p_t": 0.0030894610674129645,
+      "p_c": 0.0019375880152813366,
+      "rel_lift": 0.5944881177252619
+    }
+  },
+  "by_fraction": [
+    {
+      "fraction": 1.0,
+      "n_total": 13979592.0,
+      "visit": {
+        "mde_abs": 0.00040223600391407354,
+        "mde_rel": 0.01052947455638931,
+        "power_observed_effect": 1.0
+      },
+      "conversion": {
+        "mde_abs": 9.228077217163973e-05,
+        "mde_rel": 0.04762662209088892,
+        "power_observed_effect": 1.0
+      }
+    },
+    {
+      "fraction": 0.5,
+      "n_total": 6989796.0,
+      "visit": {
+        "mde_abs": 0.0005688476120100401,
+        "mde_rel": 0.01489092572230819,
+        "power_observed_effect": 1.0
+      },
+      "conversion": {
+        "mde_abs": 0.0001305047195513946,
+        "mde_rel": 0.06735421489095317,
+        "power_observed_effect": 1.0
+      }
+    },
+    {
+      "fraction": 0.2,
+      "n_total": 2795918.4000000004,
+      "visit": {
+        "mde_abs": 0.0008994270477497399,
+        "mde_rel": 0.023544620875440937,
+        "power_observed_effect": 1.0
+      },
+      "conversion": {
+        "mde_abs": 0.0002063460795919573,
+        "mde_rel": 0.10649636453392079,
+        "power_observed_effect": 1.0
+      }
+    },
+    {
+      "fraction": 0.1,
+      "n_total": 1397959.2000000002,
+      "visit": {
+        "mde_abs": 0.0012719819292928757,
+        "mde_rel": 0.03329712216298127,
+        "power_observed_effect": 1.0
+      },
+      "conversion": {
+        "mde_abs": 0.0002918174243014642,
+        "mde_rel": 0.15060860306729987,
+        "power_observed_effect": 1.0
+      }
+    },
+    {
+      "fraction": 0.05,
+      "n_total": 698979.6000000001,
+      "visit": {
+        "mde_abs": 0.0017988540954994798,
+        "mde_rel": 0.047089241750881874,
+        "power_observed_effect": 1.0
+      },
+      "conversion": {
+        "mde_abs": 0.0004126921591839146,
+        "mde_rel": 0.21299272906784159,
+        "power_observed_effect": 0.9999998949916339
+      }
+    },
+    {
+      "fraction": 0.02,
+      "n_total": 279591.84,
+      "visit": {
+        "mde_abs": 0.002844238060050201,
+        "mde_rel": 0.07445462861154097,
+        "power_observed_effect": 0.9999999999999982
+      },
+      "conversion": {
+        "mde_abs": 0.0006525235977569731,
+        "mde_rel": 0.3367710744547659,
+        "power_observed_effect": 0.9925751757783584
+      }
+    },
+    {
+      "fraction": 0.01,
+      "n_total": 139795.92,
+      "visit": {
+        "mde_abs": 0.004022360039140736,
+        "mde_rel": 0.10529474556389311,
+        "power_observed_effect": 0.9999996196908807
+      },
+      "conversion": {
+        "mde_abs": 0.0009228077217163974,
+        "mde_rel": 0.47626622090888926,
+        "power_observed_effect": 0.8526580512853041
+      }
+    },
+    {
+      "fraction": 0.005,
+      "n_total": 69897.96,
+      "visit": {
+        "mde_abs": 0.005688476120100402,
+        "mde_rel": 0.14890925722308193,
+        "power_observed_effect": 0.9979791515439866
+      },
+      "conversion": {
+        "mde_abs": 0.0013050471955139461,
+        "mde_rel": 0.6735421489095318,
+        "power_observed_effect": 0.5264519282988983
+      }
+    },
+    {
+      "fraction": 0.002,
+      "n_total": 27959.184,
+      "visit": {
+        "mde_abs": 0.0089942704774974,
+        "mde_rel": 0.2354462087544094,
+        "power_observed_effect": 0.850325257608214
+      },
+      "conversion": {
+        "mde_abs": 0.0020634607959195733,
+        "mde_rel": 1.064963645339208,
+        "power_observed_effect": 0.21059387639773897
+      }
+    },
+    {
+      "fraction": 0.001,
+      "n_total": 13979.592,
+      "visit": {
+        "mde_abs": 0.012719819292928754,
+        "mde_rel": 0.3329712216298127,
+        "power_observed_effect": 0.5445763633841969
+      },
+      "conversion": {
+        "mde_abs": 0.0029181742430146418,
+        "mde_rel": 1.5060860306729986,
+        "power_observed_effect": 0.1072135672901121
+      }
+    }
+  ],
+  "empirical": [
+    {
+      "k": 10,
+      "fraction": 0.1,
+      "visit": {
+        "empirical_power": 1.0,
+        "analytic_power": 1.0
+      },
+      "conversion": {
+        "empirical_power": 1.0,
+        "analytic_power": 1.0
+      }
+    },
+    {
+      "k": 100,
+      "fraction": 0.01,
+      "visit": {
+        "empirical_power": 1.0,
+        "analytic_power": 0.9999996196908807
+      },
+      "conversion": {
+        "empirical_power": 0.85,
+        "analytic_power": 0.8526580512853041
+      }
+    },
+    {
+      "k": 1000,
+      "fraction": 0.001,
+      "visit": {
+        "empirical_power": 0.539,
+        "analytic_power": 0.5445763633841969
+      },
+      "conversion": {
+        "empirical_power": 0.096,
+        "analytic_power": 0.1072135672901121
+      }
+    }
+  ],
+  "allocation": {
+    "visit": {
+      "n_85_15": 24596.102927128366,
+      "n_50_50": 12175.691444307478
+    },
+    "conversion": {
+      "n_85_15": 123115.6651657234,
+      "n_50_50": 59323.97617179786
+    }
+  },
+  "alpha": 0.05,
+  "power": 0.8,
+  "runtime_sec": 6.1
+}
