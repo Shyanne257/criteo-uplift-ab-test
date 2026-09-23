@@ -3,7 +3,7 @@
 > **Business question:** Criteo ran a randomized ad-incrementality test. How many *extra* visits and
 > conversions do ads actually cause, which users respond best, and who should we target?
 
-**Status:** 🚧 in progress — Steps 1–4 of 7 done.
+**Status:** 🚧 in progress — Steps 1–5 of 7 done.
 
 | Step | What | Status | Report |
 |---|---|---|---|
@@ -11,7 +11,7 @@
 | 2 | Experiment validity: SRM test, covariate balance | ✅ | [02_validity.md](reports/02_validity.md) |
 | 3 | Core A/B analysis: z-test + bootstrap CIs for visit & conversion | ✅ | [03_ab_results.md](reports/03_ab_results.md) |
 | 4 | Power & minimum detectable effect | ✅ | [04_power_mde.md](reports/04_power_mde.md) |
-| 5 | Assignment vs. exposure: ITT vs. CACE | ⏳ | |
+| 5 | Assignment vs. exposure: ITT vs. CACE | ✅ | [05_itt_cace.md](reports/05_itt_cace.md) |
 | 6 | Heterogeneous effects & T-learner uplift model (Qini) | ⏳ | |
 | 7 | Streamlit dashboard & write-up | ⏳ | |
 
@@ -20,6 +20,8 @@
 > **Headline:** Ads lift the visit rate by **+27.1%** (95% CI 26.2–28.0%) and the conversion rate by
 > **+59.4%** (95% CI 54.4–64.7%) — about **123K incremental visits** and **13.7K incremental
 > conversions** across 11.9M users assigned to see ads. Randomisation checks pass.
+> Only 3.6% of assigned users actually saw an ad; for them the ad raised the visit rate from an
+> estimated **12.8% to 41.5%** (CACE +28.7 pp, 95% CI 27.9–29.5).
 
 ### 1. Data: 13.98M users, clean, processed in ~60s with PySpark
 - **13,979,592** users; **0** missing values; all binary columns valid.
@@ -87,6 +89,32 @@
 ![MDE curve](reports/figures/04_mde_curve.png)
 ![Power curve](reports/figures/04_power_curve.png)
 
+### 5. For users who actually saw an ad, the effect is ~28× larger (ITT vs. CACE)
+
+Only **3.60%** of treated users were actually exposed; no control user was (one-sided
+non-compliance). CACE = ITT ÷ exposure rate — the Wald / instrumental-variable estimator with random
+assignment as the instrument — so here it equals the effect on users who saw an ad.
+
+| Metric | ITT (per assigned user) | CACE (per exposed user), 95% CI | Exposed users' rate | Same users without the ad (est.) | Relative lift for exposed |
+|---|---|---|---|---|---|
+| Visit | +1.03 pp | **+28.7 pp** (27.9, 29.5) | 41.5% | 12.8% | **+225%** |
+| Conversion | +0.115 pp | **+3.20 pp** (3.01, 3.38) | 5.38% | 2.18% | **+146%** |
+
+- **Use ITT to decide on the campaign, CACE to judge the ad itself.** ITT is what the business gets
+  per targeted user; CACE is what an impression does to someone who sees it.
+- **Dividing by 3.6% amplifies noise ~28×** — CACE's CI is ~28× wider in absolute terms. Delta-method
+  (with the ITT–exposure covariance) and multinomial-bootstrap CIs agree.
+- **The naive comparison is biased.** Comparing exposed users with the control group overstates the
+  effect by **1.31× (visit) and 1.62× (conversion)**. Exposure is not random: 11 of 12 features
+  differ between exposed and unexposed treated users with |SMD| ≥ 0.1 (up to 1.47 for f3), versus
+  0 of 12 between the randomised groups. Exposed users would have visited 3× more often than
+  average (12.8% vs 3.8%) even without the ad.
+- **Assumptions:** random assignment (Step 2); exclusion restriction (assignment affects outcomes
+  only through exposure — violated if some impressions were not logged); monotonicity (trivially
+  true, control cannot be exposed).
+
+![ITT vs CACE](reports/figures/05_itt_vs_cace.png)
+
 ## Data
 
 [Criteo Uplift Prediction Dataset v2.1](https://huggingface.co/datasets/criteo/criteo-uplift):
@@ -103,7 +131,8 @@ redistributed in this repo — `scripts/00_download_data.sh` fetches it.
 │   ├── 01_ingest_and_profile.py   # Step 1: PySpark ingest -> profile -> Parquet
 │   ├── 02_validity_checks.py      # Step 2: SRM chi-square test + covariate balance (SMD)
 │   ├── 03_ab_analysis.py          # Step 3: z-tests, delta-method & bootstrap CIs
-│   └── 04_power_mde.py            # Step 4: MDE, power curves, empirical power, allocation cost
+│   ├── 04_power_mde.py            # Step 4: MDE, power curves, empirical power, allocation cost
+│   └── 05_itt_cace.py             # Step 5: ITT vs CACE (IV/Wald), naive-comparison bias
 ├── src/criteo_ab/spark.py         # SparkSession factory + explicit schema
 ├── reports/                       # generated reports and figures
 └── data/{raw,processed}/          # git-ignored
@@ -124,6 +153,7 @@ python scripts/01_ingest_and_profile.py
 python scripts/02_validity_checks.py
 python scripts/03_ab_analysis.py
 python scripts/04_power_mde.py
+python scripts/05_itt_cace.py
 
 # or: synthetic sample, runs in ~30s (numbers are NOT real results)
 python scripts/make_sample_data.py
@@ -131,6 +161,7 @@ python scripts/01_ingest_and_profile.py --input data/raw/sample.csv.gz
 python scripts/02_validity_checks.py
 python scripts/03_ab_analysis.py
 python scripts/04_power_mde.py
+python scripts/05_itt_cace.py
 ```
 
 ### Why Spark for 14M rows?
