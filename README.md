@@ -3,14 +3,14 @@
 > **Business question:** Criteo ran a randomized ad-incrementality test. How many *extra* visits and
 > conversions do ads actually cause, which users respond best, and who should we target?
 
-**Status:** 🚧 in progress — Steps 1–3 of 7 done.
+**Status:** 🚧 in progress — Steps 1–4 of 7 done.
 
 | Step | What | Status | Report |
 |---|---|---|---|
 | 1 | PySpark ingestion, data-quality profile, Parquet | ✅ | [01_data_profile.md](reports/01_data_profile.md) |
 | 2 | Experiment validity: SRM test, covariate balance | ✅ | [02_validity.md](reports/02_validity.md) |
 | 3 | Core A/B analysis: z-test + bootstrap CIs for visit & conversion | ✅ | [03_ab_results.md](reports/03_ab_results.md) |
-| 4 | Power & minimum detectable effect | ⏳ | |
+| 4 | Power & minimum detectable effect | ✅ | [04_power_mde.md](reports/04_power_mde.md) |
 | 5 | Assignment vs. exposure: ITT vs. CACE | ⏳ | |
 | 6 | Heterogeneous effects & T-learner uplift model (Qini) | ⏳ | |
 | 7 | Streamlit dashboard & write-up | ⏳ | |
@@ -62,6 +62,31 @@
 
 ![Relative lift with 95% CIs](reports/figures/03_lift_ci.png)
 
+### 4. The test is ~12–26× over-powered; 1% of traffic would still have been enough
+
+| Metric | MDE, full sample (80% power) | Observed lift | Power at 1% traffic (140K users) | Smallest traffic reaching 80% power |
+|---|---|---|---|---|
+| Visit | 1.05% | +27.1% (26× MDE) | 100% | 0.2% |
+| Conversion | 4.76% | +59.4% (12× MDE) | 85% | 1.0% |
+
+- **Analytic power is confirmed on real data.** Users were split at random into *k* disjoint
+  buckets (each a mini-experiment with 1/*k* of the traffic) and the z-test re-run in every bucket
+  in a single Spark `groupBy`. The share of significant buckets matches the formula almost exactly:
+
+  | Traffic per bucket | Visit: empirical / analytic | Conversion: empirical / analytic |
+  |---|---|---|
+  | 1% (100 buckets) | 100% / 100% | 85.0% / 85.3% |
+  | 0.1% (1,000 buckets) | 53.9% / 54.5% | 9.6% / 10.7% |
+
+- **Size the test for the hardest metric.** Conversion needs 5× more traffic than visits to reach
+  80% power (1.0% vs 0.2%). Planning on visit alone would under-power the business outcome.
+- **The 85:15 split costs ~2× sample size.** Detecting the observed conversion lift needs 123K users
+  at 85:15 vs 59K at 50:50 (variance ∝ 1/(0.85·0.15) = 7.84 vs 4). A small holdout limits lost
+  revenue from users who never see ads; the statistical price is a larger required sample.
+
+![MDE curve](reports/figures/04_mde_curve.png)
+![Power curve](reports/figures/04_power_curve.png)
+
 ## Data
 
 [Criteo Uplift Prediction Dataset v2.1](https://huggingface.co/datasets/criteo/criteo-uplift):
@@ -77,7 +102,8 @@ redistributed in this repo — `scripts/00_download_data.sh` fetches it.
 │   ├── make_sample_data.py        # tiny synthetic file with the same schema (for quick runs / CI)
 │   ├── 01_ingest_and_profile.py   # Step 1: PySpark ingest -> profile -> Parquet
 │   ├── 02_validity_checks.py      # Step 2: SRM chi-square test + covariate balance (SMD)
-│   └── 03_ab_analysis.py          # Step 3: z-tests, delta-method & bootstrap CIs
+│   ├── 03_ab_analysis.py          # Step 3: z-tests, delta-method & bootstrap CIs
+│   └── 04_power_mde.py            # Step 4: MDE, power curves, empirical power, allocation cost
 ├── src/criteo_ab/spark.py         # SparkSession factory + explicit schema
 ├── reports/                       # generated reports and figures
 └── data/{raw,processed}/          # git-ignored
@@ -97,12 +123,14 @@ bash scripts/00_download_data.sh
 python scripts/01_ingest_and_profile.py
 python scripts/02_validity_checks.py
 python scripts/03_ab_analysis.py
+python scripts/04_power_mde.py
 
 # or: synthetic sample, runs in ~30s (numbers are NOT real results)
 python scripts/make_sample_data.py
 python scripts/01_ingest_and_profile.py --input data/raw/sample.csv.gz
 python scripts/02_validity_checks.py
 python scripts/03_ab_analysis.py
+python scripts/04_power_mde.py
 ```
 
 ### Why Spark for 14M rows?
