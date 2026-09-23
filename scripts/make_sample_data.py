@@ -30,13 +30,16 @@ def main() -> None:
     X[:, [1, 5, 9]] = np.round(X[:, [1, 5, 9]] * 2) / 2  # a few discretised features
     treatment = (rng.random(n) < 0.85).astype(int)
 
-    # baseline visit probability ~4%, ad lift concentrated in users with high f0
-    logit = -3.2 + 0.4 * X[:, 2] - 0.3 * X[:, 7]
-    uplift = treatment * (0.15 + 0.35 * (X[:, 0] > 0.5))
+    # exposure: only treated users can see the ad, more active users (high f3) see it more
+    p_exp = 1 / (1 + np.exp(-(-3.6 + 0.8 * X[:, 3])))
+    exposure = (treatment * (rng.random(n) < p_exp)).astype(int)
+    # baseline visit probability ~4%, higher for active users; the ad works only if seen,
+    # and works best for users with high f0 (heterogeneous effect for Step 6)
+    logit = -3.3 + 0.4 * X[:, 2] - 0.3 * X[:, 7] + 0.5 * X[:, 3]
+    uplift = exposure * (1.2 + 1.0 * (X[:, 0] > 0.5))
     p_visit = 1 / (1 + np.exp(-(logit + uplift)))
     visit = (rng.random(n) < p_visit).astype(int)
-    conversion = (visit * (rng.random(n) < 0.06 + 0.02 * treatment)).astype(int)
-    exposure = (treatment * (rng.random(n) < 0.036)).astype(int)
+    conversion = (visit * (rng.random(n) < 0.05 + 0.03 * exposure)).astype(int)
 
     df = pd.DataFrame(X, columns=[f"f{i}" for i in range(12)]).round(6)
     df["treatment"], df["conversion"], df["visit"], df["exposure"] = treatment, conversion, visit, exposure
