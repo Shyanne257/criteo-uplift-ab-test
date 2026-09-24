@@ -3,7 +3,7 @@
 > **Business question:** Criteo ran a randomized ad-incrementality test. How many *extra* visits and
 > conversions do ads actually cause, which users respond best, and who should we target?
 
-**Status:** 🚧 in progress — Steps 1–5 of 7 done.
+**Status:** 🚧 in progress — Steps 1–6 of 7 done.
 
 | Step | What | Status | Report |
 |---|---|---|---|
@@ -12,7 +12,7 @@
 | 3 | Core A/B analysis: z-test + bootstrap CIs for visit & conversion | ✅ | [03_ab_results.md](reports/03_ab_results.md) |
 | 4 | Power & minimum detectable effect | ✅ | [04_power_mde.md](reports/04_power_mde.md) |
 | 5 | Assignment vs. exposure: ITT vs. CACE | ✅ | [05_itt_cace.md](reports/05_itt_cace.md) |
-| 6 | Heterogeneous effects & T-learner uplift model (Qini) | ⏳ | |
+| 6 | Heterogeneous effects & T-learner uplift model (Qini) | ✅ | [06_heterogeneity_uplift.md](reports/06_heterogeneity_uplift.md) |
 | 7 | Streamlit dashboard & write-up | ⏳ | |
 
 ## Key results so far
@@ -115,6 +115,53 @@ assignment as the instrument — so here it equals the effect on users who saw a
 
 ![ITT vs CACE](reports/figures/05_itt_vs_cace.png)
 
+### 6. The effect is concentrated: targeting the top 30% keeps ~80% of the incremental value
+
+**Segment analysis (full 14M, PySpark).** Each feature was cut into quantile buckets and the lift
+estimated per bucket; Cochran's Q tests whether lifts differ across buckets.
+- 9 of 12 features show significant heterogeneity after Bonferroni correction (24 tests), for both
+  visit and conversion. (f3, f5, f11 are so concentrated on one value that they form a single
+  bucket and cannot be tested.)
+- The lift is concentrated in small, high-intent segments. Example, **f2**:
+
+  | f2 bucket | Users | Visit rate C → T | Visit lift | Conversion lift |
+  |---|---|---|---|---|
+  | ≤ 8.21 | 7.3M (52%) | 0.10% → 0.15% | +0.05 pp | +0.003 pp |
+  | (8.21, 8.38] | 1.1M (8%) | 30.0% → 35.0% | **+5.01 pp** | **+0.84 pp** |
+  | (8.38, 8.81] | 2.8M (20%) | 7.0% → 9.0% | +2.00 pp | +0.18 pp |
+  | > 8.81 | 2.8M (20%) | 0.88% → 1.22% | +0.33 pp | +0.02 pp |
+
+  Half of all users barely respond; 8% of users show a lift 100× larger.
+- **Multiple comparisons:** with many cuts some segments look significant by chance, so segment
+  findings are treated as hypotheses; p-values are Bonferroni- (per feature) and
+  Benjamini–Hochberg- (per bucket) adjusted, and the targeting claim is validated out of sample.
+
+**T-learner uplift model.** 2M-user random sample, 50/50 train/test split. Two LightGBM classifiers
+(treated / control) per outcome; uplift(x) = P(y | x, T) − P(y | x, C). Evaluated on held-out users.
+
+| Targeting only the top … by predicted uplift | 10% | 20% | **30%** | 50% |
+|---|---|---|---|---|
+| Share of incremental **visits** kept | 54% | 71% | **80%** (75–85%) | 86% |
+| Share of incremental **conversions** kept | 67% | 77% | **78%** (71–87%) | 83% |
+| Random targeting | 10% | 20% | 30% | 50% |
+
+Qini coefficients: 0.281 (visit), 0.273 (conversion). Bootstrap 95% CIs in brackets.
+
+- **Recommendation:** restrict ads to the top ~30% of users by predicted uplift — about 70% less
+  ad spend for roughly 20% fewer incremental conversions.
+- **Use the model for ranking, not absolute values.** Top-decile predicted visit uplift is +8.7 pp
+  vs +5.4 pp observed: T-learner predictions are over-dispersed because the two models' errors do
+  not cancel. The Qini curve depends only on the ranking.
+- **Known weakness — the bottom decile.** Users predicted to have the most *negative* uplift
+  (−2.2 pp) actually show a significantly *positive* one (+1.2 pp, CI 0.7–1.8). These are
+  high-activity users where the small control-group model is noisy. Extreme negative predictions
+  should not be read as "ads hurt"; an X-learner or a directly-trained uplift model would be the
+  next thing to try.
+
+![Segment lift](reports/figures/06_segment_lift.png)
+![Qini curves](reports/figures/06_qini_curves.png)
+![Uplift by decile](reports/figures/06_uplift_by_decile.png)
+
 ## Data
 
 [Criteo Uplift Prediction Dataset v2.1](https://huggingface.co/datasets/criteo/criteo-uplift):
@@ -132,7 +179,8 @@ redistributed in this repo — `scripts/00_download_data.sh` fetches it.
 │   ├── 02_validity_checks.py      # Step 2: SRM chi-square test + covariate balance (SMD)
 │   ├── 03_ab_analysis.py          # Step 3: z-tests, delta-method & bootstrap CIs
 │   ├── 04_power_mde.py            # Step 4: MDE, power curves, empirical power, allocation cost
-│   └── 05_itt_cace.py             # Step 5: ITT vs CACE (IV/Wald), naive-comparison bias
+│   ├── 05_itt_cace.py             # Step 5: ITT vs CACE (IV/Wald), naive-comparison bias
+│   └── 06_heterogeneity_uplift.py # Step 6: segment HTE (Cochran's Q) + T-learner, Qini
 ├── src/criteo_ab/spark.py         # SparkSession factory + explicit schema
 ├── reports/                       # generated reports and figures
 └── data/{raw,processed}/          # git-ignored
@@ -154,6 +202,7 @@ python scripts/02_validity_checks.py
 python scripts/03_ab_analysis.py
 python scripts/04_power_mde.py
 python scripts/05_itt_cace.py
+python scripts/06_heterogeneity_uplift.py
 
 # or: synthetic sample, runs in ~30s (numbers are NOT real results)
 python scripts/make_sample_data.py
@@ -162,6 +211,7 @@ python scripts/02_validity_checks.py
 python scripts/03_ab_analysis.py
 python scripts/04_power_mde.py
 python scripts/05_itt_cace.py
+python scripts/06_heterogeneity_uplift.py
 ```
 
 ### Why Spark for 14M rows?
