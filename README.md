@@ -3,25 +3,33 @@
 > **Business question:** Criteo ran a randomized ad-incrementality test. How many *extra* visits and
 > conversions do ads actually cause, which users respond best, and who should we target?
 
-**Status:** 🚧 in progress — Steps 1–6 of 7 done.
+**📊 [Interactive dashboard](https://shyanne257.github.io/criteo-uplift-ab-test/)** · static page, no server, loads instantly
 
-| Step | What | Status | Report |
+![Dashboard](reports/figures/dashboard.png)
+
+## TL;DR
+
+| Question | Answer |
+|---|---|
+| Is the experiment trustworthy? | **Yes.** No sample ratio mismatch (p = 0.999); all 12 features balanced (max \|SMD\| 0.049). |
+| Do ads work? | **Yes.** Visit rate **+27.1%** (95% CI 26.2–28.0%), conversion rate **+59.4%** (54.4–64.7%): ≈ **123K incremental visits** and **13.7K incremental conversions** from 11.9M users assigned to ads. |
+| How big is the effect for people who actually see an ad? | Only 3.6% of assigned users were exposed. For them the visit rate rose from an estimated **12.8% to 41.5%** (CACE +28.7 pp). Comparing exposed users with control naively overstates the conversion effect by **62%**. |
+| Was the test big enough? | Far bigger than needed: **1% of the traffic** would still have detected the conversion lift with 85% power (confirmed empirically on 100 disjoint 1% buckets). |
+| Who should we target? | The effect is concentrated. Showing ads only to the **top 30%** of users by predicted uplift keeps **78% of incremental conversions** (95% CI 71–87%) and **80% of incremental visits**. |
+
+## Methods at a glance
+
+| Step | What | Key technique | Report |
 |---|---|---|---|
-| 1 | PySpark ingestion, data-quality profile, Parquet | ✅ | [01_data_profile.md](reports/01_data_profile.md) |
-| 2 | Experiment validity: SRM test, covariate balance | ✅ | [02_validity.md](reports/02_validity.md) |
-| 3 | Core A/B analysis: z-test + bootstrap CIs for visit & conversion | ✅ | [03_ab_results.md](reports/03_ab_results.md) |
-| 4 | Power & minimum detectable effect | ✅ | [04_power_mde.md](reports/04_power_mde.md) |
-| 5 | Assignment vs. exposure: ITT vs. CACE | ✅ | [05_itt_cace.md](reports/05_itt_cace.md) |
-| 6 | Heterogeneous effects & T-learner uplift model (Qini) | ✅ | [06_heterogeneity_uplift.md](reports/06_heterogeneity_uplift.md) |
-| 7 | Streamlit dashboard & write-up | ⏳ | |
+| 1 | Ingest 14M rows, data-quality profile, Parquet | PySpark, explicit schema, one-pass aggregations | [01](reports/01_data_profile.md) |
+| 2 | Experiment validity | SRM chi-square test, standardized mean differences | [02](reports/02_validity.md) |
+| 3 | Core A/B analysis | Two-proportion z-test, delta-method CI, binomial bootstrap | [03](reports/03_ab_results.md) |
+| 4 | Power & MDE | Analytic power curves, empirical power via disjoint buckets, allocation cost | [04](reports/04_power_mde.md) |
+| 5 | Assignment vs. exposure | ITT vs. CACE (Wald / IV estimator), selection-bias check | [05](reports/05_itt_cace.md) |
+| 6 | Heterogeneous effects & targeting | Cochran's Q + Bonferroni/BH, T-learner (LightGBM), Qini curves | [06](reports/06_heterogeneity_uplift.md) |
+| 7 | Dashboard | Static interactive page built from the step reports (GitHub Pages) | [docs/](docs/index.html) |
 
-## Key results so far
-
-> **Headline:** Ads lift the visit rate by **+27.1%** (95% CI 26.2–28.0%) and the conversion rate by
-> **+59.4%** (95% CI 54.4–64.7%) — about **123K incremental visits** and **13.7K incremental
-> conversions** across 11.9M users assigned to see ads. Randomisation checks pass.
-> Only 3.6% of assigned users actually saw an ad; for them the ad raised the visit rate from an
-> estimated **12.8% to 41.5%** (CACE +28.7 pp, 95% CI 27.9–29.5).
+## Detailed results
 
 ### 1. Data: 13.98M users, clean, processed in ~60s with PySpark
 - **13,979,592** users; **0** missing values; all binary columns valid.
@@ -162,6 +170,15 @@ Qini coefficients: 0.281 (visit), 0.273 (conversion). Bootstrap 95% CIs in brack
 ![Qini curves](reports/figures/06_qini_curves.png)
 ![Uplift by decile](reports/figures/06_uplift_by_decile.png)
 
+## Limitations & next steps
+
+- **Anonymised features:** segments cannot be described in business terms (e.g. "frequent shoppers").
+- **Exclusion restriction:** CACE assumes assignment affects outcomes only through logged exposure.
+- **Bottom-decile mis-ranking:** the T-learner's most negative predictions are unreliable (Step 6);
+  next: X-learner / directly trained uplift models, and cost-aware targeting (uplift × margin − ad cost).
+- **Public dataset:** the near-exact 85:15 split suggests the release was subsampled, so the SRM check
+  validates data preparation rather than the live randomiser.
+
 ## Data
 
 [Criteo Uplift Prediction Dataset v2.1](https://huggingface.co/datasets/criteo/criteo-uplift):
@@ -180,8 +197,12 @@ redistributed in this repo — `scripts/00_download_data.sh` fetches it.
 │   ├── 03_ab_analysis.py          # Step 3: z-tests, delta-method & bootstrap CIs
 │   ├── 04_power_mde.py            # Step 4: MDE, power curves, empirical power, allocation cost
 │   ├── 05_itt_cace.py             # Step 5: ITT vs CACE (IV/Wald), naive-comparison bias
-│   └── 06_heterogeneity_uplift.py # Step 6: segment HTE (Cochran's Q) + T-learner, Qini
-├── src/criteo_ab/spark.py         # SparkSession factory + explicit schema
+│   ├── 06_heterogeneity_uplift.py # Step 6: segment HTE (Cochran's Q) + T-learner, Qini
+│   └── 07_build_dashboard.py      # Step 7: static interactive dashboard -> docs/index.html
+├── src/criteo_ab/
+│   ├── spark.py                   # SparkSession factory + explicit schema
+│   └── dashboard_template.html    # dashboard page (data injected at build time)
+├── docs/index.html                # built dashboard, served by GitHub Pages
 ├── reports/                       # generated reports and figures
 └── data/{raw,processed}/          # git-ignored
 ```
@@ -203,6 +224,7 @@ python scripts/03_ab_analysis.py
 python scripts/04_power_mde.py
 python scripts/05_itt_cace.py
 python scripts/06_heterogeneity_uplift.py
+python scripts/07_build_dashboard.py      # -> docs/index.html
 
 # or: synthetic sample, runs in ~30s (numbers are NOT real results)
 python scripts/make_sample_data.py
@@ -212,6 +234,7 @@ python scripts/03_ab_analysis.py
 python scripts/04_power_mde.py
 python scripts/05_itt_cace.py
 python scripts/06_heterogeneity_uplift.py
+python scripts/07_build_dashboard.py      # -> docs/index.html
 ```
 
 ### Why Spark for 14M rows?

@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Criteo Ad Uplift Test</title>
+<meta name="description" content="A/B test and uplift analysis of a 14M-user randomized ad experiment (Criteo Uplift v2.1), built with PySpark.">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f3ef;
+  --surface: #fcfcfb;
+  --border: #e4e3df;
+  --grid: #e9e8e4;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --text-3: #74736e;
+  --accent: #2a78d6;
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --neutral: #8a8983;
+  --good-bg: #e3f4ea;
+  --good: #0f6b3a;
+  --warn-bg: #fdf0da;
+  --warn: #8a5300;
+  --tip-bg: #0b0b0b;
+  --tip-text: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --border: #2e2e2c; --grid: #2a2a28;
+    --text: #ffffff; --text-2: #c3c2b7; --text-3: #9a998f; --accent: #3987e5;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --neutral: #8a8983;
+    --good-bg: #16301f; --good: #7fd6a2; --warn-bg: #3a2a0c; --warn: #f2c26b;
+    --tip-bg: #ffffff; --tip-text: #0b0b0b;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --surface: #1a1a19; --border: #2e2e2c; --grid: #2a2a28;
+  --text: #ffffff; --text-2: #c3c2b7; --text-3: #9a998f; --accent: #3987e5;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --neutral: #8a8983;
+  --good-bg: #16301f; --good: #7fd6a2; --warn-bg: #3a2a0c; --warn: #f2c26b;
+  --tip-bg: #ffffff; --tip-text: #0b0b0b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1080px; margin: 0 auto; padding: 32px 24px 64px; }
+header.top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin: 0 0 6px; }
+h1 { font-size: 30px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -.01em; }
+.lede { color: var(--text-2); max-width: 760px; margin: 0; font-size: 16px; }
+.theme-btn {
+  flex: none; border: 1px solid var(--border); background: var(--surface); color: var(--text-2);
+  border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.theme-btn:hover { color: var(--text); }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 28px 0 8px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.kpi .label { font-size: 13px; color: var(--text-2); }
+.kpi .value { font-size: 30px; font-weight: 650; letter-spacing: -.02em; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+.kpi .sub { font-size: 12.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 20px 0 8px; font-size: 13.5px; }
+nav.toc a { color: var(--text-2); text-decoration: none; border-bottom: 1px solid var(--border); }
+nav.toc a:hover { color: var(--text); }
+section { margin-top: 40px; }
+section > h2 { font-size: 21px; margin: 0 0 4px; letter-spacing: -.01em; }
+section > .intro { color: var(--text-2); margin: 0 0 16px; max-width: 800px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 18px 14px; min-width: 0; }
+.card h3 { font-size: 15px; margin: 0 0 2px; }
+.card .note { font-size: 13px; color: var(--text-2); margin: 0 0 10px; }
+.chart { width: 100%; position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); margin: 0 0 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.sw.ring { width: 9px; height: 9px; border-radius: 50%; background: transparent !important; border: 2px solid; }
+.sw.dash { background: repeating-linear-gradient(90deg, var(--neutral) 0 4px, transparent 4px 7px) !important; }
+.sw.diamond { width: 8px; height: 8px; transform: rotate(45deg); border: 1.5px solid var(--text); background: transparent !important; border-radius: 1px; }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.pill.good { background: var(--good-bg); color: var(--good); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.stat-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; margin: 8px 0 0; }
+.stat-list dt { color: var(--text-2); }
+.stat-list dd { margin: 0; font-variant-numeric: tabular-nums; }
+.bullets { margin: 12px 0 0; padding-left: 18px; color: var(--text-2); font-size: 14px; }
+.bullets li { margin: 4px 0; }
+.bullets strong { color: var(--text); }
+details { margin-top: 8px; font-size: 13px; }
+summary { cursor: pointer; color: var(--text-2); }
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--text-2); font-weight: 600; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 0 0 10px; }
+.seg button { border: 0; background: transparent; color: var(--text-2); font: inherit; font-size: 13px; padding: 5px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--text); color: var(--surface); }
+select { font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; color: var(--text-2); }
+.controls .seg { margin: 0; }
+#tip {
+  position: fixed; pointer-events: none; z-index: 10; background: var(--tip-bg); color: var(--tip-text);
+  font-size: 12.5px; line-height: 1.45; padding: 7px 9px; border-radius: 8px; max-width: 280px;
+  opacity: 0; transition: opacity .08s; font-variant-numeric: tabular-nums;
+}
+#tip b { font-weight: 650; }
+.axis text { fill: var(--text-3); font-size: 11px; }
+.axis-title { fill: var(--text-2); font-size: 11.5px; }
+.ann { fill: var(--text); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.ann-muted { fill: var(--text-2); font-size: 11px; }
+footer { margin-top: 48px; font-size: 13px; color: var(--text-3); border-top: 1px solid var(--border); padding-top: 16px; }
+footer a { color: var(--text-2); }
+@media (max-width: 820px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid2 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 520px) {
+  .wrap { padding: 20px 16px 48px; }
+  h1 { font-size: 24px; }
+  .kpi .value { font-size: 24px; }
+  header.top { flex-direction: column-reverse; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">A/B test &amp; uplift analysis · PySpark · 14M users</p>
+      <h1>Does ad exposure drive incremental visits?</h1>
+      <p class="lede">Criteo ran a randomized ad-incrementality test. How many <em>extra</em> visits and conversions do ads cause, which users respond best, and who should we target?</p>
+    </div>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle color theme">◐ Theme</button>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+  <nav class="toc" aria-label="Sections">
+    <a href="#validity">1 · Experiment validity</a>
+    <a href="#ab">2 · A/B results</a>
+    <a href="#power">3 · Power &amp; MDE</a>
+    <a href="#cace">4 · ITT vs CACE</a>
+    <a href="#segments">5 · Who responds</a>
+    <a href="#targeting">6 · Targeting model</a>
+  </nav>
+
+  <section id="validity">
+    <h2>1 · Is the experiment valid?</h2>
+    <p class="intro">Before reading any effect: did randomization work? A sample-ratio-mismatch test on group sizes and a balance check on all 12 pre-treatment features.</p>
+    <div class="grid2">
+      <div class="card">
+        <h3>Sample ratio mismatch</h3>
+        <p class="note">Chi-square test of observed vs designed 85:15 split. Alarm threshold p &lt; 0.001.</p>
+        <div id="srm"></div>
+      </div>
+      <div class="card">
+        <h3>Covariate balance</h3>
+        <p class="note">|Standardized mean difference| treatment vs control. Below 0.1 = balanced.</p>
+        <div class="chart" id="balanceChart"></div>
+        <details><summary>Data table</summary><div class="tbl-wrap" id="balanceTable"></div></details>
+      </div>
+    </div>
+  </section>
+
+  <section id="ab">
+    <h2>2 · Ads lift visits and conversions</h2>
+    <p class="intro">Intent-to-treat effect: everyone assigned to treatment vs control. Two-proportion z-test with a delta-method CI for the relative lift, cross-checked with a 10,000-replicate bootstrap.</p>
+    <div class="grid2">
+      <div class="card">
+        <h3>Relative lift with 95% CI</h3>
+        <div class="legend"><span><i class="sw dot" style="background:var(--s1)"></i>z-test (delta method)</span><span><i class="sw dot" style="background:var(--s2)"></i>Bootstrap</span></div>
+        <div class="chart" id="liftChart"></div>
+      </div>
+      <div class="card">
+        <h3>Rates by group</h3>
+        <div class="tbl-wrap" id="abTable"></div>
+        <ul class="bullets" id="abBullets"></ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="power">
+    <h2>3 · How much traffic did the test need?</h2>
+    <p class="intro">Minimum detectable effect (80% power, α = 0.05) and power to detect the observed lift if the test had used only a fraction of the traffic. Hollow circles are an empirical check: users split into disjoint random buckets, z-test re-run in each.</p>
+    <div class="grid2">
+      <div class="card">
+        <h3>Minimum detectable relative lift</h3>
+        <div class="legend"><span><i class="sw" style="background:var(--s1)"></i>Visit MDE</span><span><i class="sw" style="background:var(--s2)"></i>Conversion MDE</span><span><i class="sw dash"></i>Observed lift</span></div>
+        <div class="chart" id="mdeChart"></div>
+      </div>
+      <div class="card">
+        <h3>Power to detect the observed lift</h3>
+        <div class="legend"><span><i class="sw" style="background:var(--s1)"></i>Visit</span><span><i class="sw" style="background:var(--s2)"></i>Conversion</span><span><i class="sw ring" style="border-color:var(--text-2)"></i>Empirical</span></div>
+        <div class="chart" id="powerChart"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <ul class="bullets" id="powerBullets" style="margin-top:0"></ul>
+      <details><summary>Data table</summary><div class="tbl-wrap" id="powerTable"></div></details>
+    </div>
+  </section>
+
+  <section id="cace">
+    <h2>4 · Assigned vs actually exposed</h2>
+    <p class="intro" id="caceIntro"></p>
+    <div class="legend"><span><i class="sw dot" style="background:var(--s1)"></i>ITT · per assigned user</span><span><i class="sw dot" style="background:var(--s3)"></i>CACE · per exposed user (causal)</span><span><i class="sw dot" style="background:var(--s2)"></i>Naive · exposed vs control (biased)</span></div>
+    <div class="grid2">
+      <div class="card"><h3>Visit rate effect (pp)</h3><div class="chart" id="caceVisit"></div></div>
+      <div class="card"><h3>Conversion rate effect (pp)</h3><div class="chart" id="caceConv"></div></div>
+    </div>
+    <div class="card" style="margin-top:16px"><ul class="bullets" id="caceBullets" style="margin-top:0"></ul></div>
+  </section>
+
+  <section id="segments">
+    <h2>5 · Who responds to ads?</h2>
+    <p class="intro">Each anonymized feature cut into quantile buckets on the full 14M users; lift per bucket with 95% CI. Cochran's Q tests whether lifts differ across buckets (Bonferroni-adjusted).</p>
+    <div class="card">
+      <div class="controls">
+        <label for="featSel">Feature</label><select id="featSel"></select>
+        <div class="seg" role="group" aria-label="Metric" id="segMetric"></div>
+        <span id="segStat"></span>
+      </div>
+      <div class="chart" id="segChart"></div>
+      <details><summary>Data table</summary><div class="tbl-wrap" id="segTable"></div></details>
+    </div>
+  </section>
+
+  <section id="targeting">
+    <h2>6 · Who should see the ad?</h2>
+    <p class="intro" id="targetIntro"></p>
+    <div class="grid2">
+      <div class="card">
+        <h3>Qini curve · held-out users</h3>
+        <div class="legend"><span><i class="sw" style="background:var(--s1)"></i>Visit</span><span><i class="sw" style="background:var(--s2)"></i>Conversion</span><span><i class="sw dash"></i>Random targeting</span></div>
+        <div class="chart" id="qiniChart"></div>
+      </div>
+      <div class="card">
+        <h3>Observed vs predicted uplift by decile</h3>
+        <div class="controls"><div class="seg" role="group" aria-label="Metric" id="decMetric"></div></div>
+        <div class="legend"><span><i class="sw" id="decSw" style="background:var(--s1);height:10px;width:10px;border-radius:2px"></i>Observed (95% CI)</span><span><i class="sw diamond"></i>Predicted</span></div>
+        <div class="chart" id="decChart"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="tbl-wrap" id="captureTable"></div>
+      <ul class="bullets" id="targetBullets"></ul>
+    </div>
+  </section>
+
+  <footer>
+    Data: <a href="https://huggingface.co/datasets/criteo/criteo-uplift">Criteo Uplift Prediction Dataset v2.1</a> (CC-BY-NC-SA 4.0) ·
+    Diemert et al., <em>A Large Scale Benchmark for Uplift Modeling</em>, AdKDD 2018.
+    All numbers are generated by the pipeline in this repository; this page is a static build of its reports.
+  </footer>
+</div>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const M = ["visit", "conversion"];
+const MC = { visit: "var(--s1)", conversion: "var(--s2)" };
+const NS = "http://www.w3.org/2000/svg";
+
+/* ---------- formatting ---------- */
+const pct = (x, d = 1) => x == null ? "–" : (x * 100).toFixed(d) + "%";
+const spct = (x, d = 1) => x == null ? "–" : (x >= 0 ? "+" : "−") + Math.abs(x * 100).toFixed(d) + "%";
+const pp = (x, d = 2) => x == null ? "–" : (x >= 0 ? "+" : "−") + Math.abs(x * 100).toFixed(d) + " pp";
+const int = x => Math.round(x).toLocaleString("en-US");
+const big = x => x >= 1e6 ? (x / 1e6).toFixed(x >= 1e7 ? 1 : 2) + "M" : x >= 1e3 ? (x / 1e3).toFixed(0) + "K" : int(x);
+const pval = p => p == null ? "–" : p === 0 ? "< 1e-300" : p < 1e-4 ? p.toExponential(1) : p.toFixed(p < 0.01 ? 4 : 3);
+const cap = s => s[0].toUpperCase() + s.slice(1);
+const trafficLabel = f => (f * 100 >= 1 ? (f * 100).toFixed(0) : (f * 100).toFixed(1)) + "%";
+
+/* ---------- tiny SVG helpers ---------- */
+function el(tag, attrs = {}, parent, style) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (style) Object.assign(n.style, style);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function lin(d0, d1, r0, r1) { const f = v => r0 + (v - d0) / (d1 - d0 || 1) * (r1 - r0); f.inv = p => d0 + (p - r0) / (r1 - r0) * (d1 - d0); return f; }
+function logS(d0, d1, r0, r1) { const a = Math.log10(d0), b = Math.log10(d1); const f = v => r0 + (Math.log10(v) - a) / (b - a) * (r1 - r0); return f; }
+function niceTicks(lo, hi, n = 5) {
+  const span = hi - lo || 1, step0 = span / n, mag = 10 ** Math.floor(Math.log10(step0));
+  const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => span / s <= n) || 10 * mag;
+  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-12; v += step) out.push(+v.toFixed(12));
+  return out;
+}
+function logTicks(lo, hi) {
+  const out = []; for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++)
+    for (const m of [1, 2, 5]) { const v = m * 10 ** e; if (v >= lo * 0.999 && v <= hi * 1.001) out.push(v); }
+  return out;
+}
+function svgFor(container, h) {
+  container.innerHTML = "";
+  const w = Math.max(280, container.clientWidth);
+  const svg = el("svg", { viewBox: `0 0 ${w} ${h}`, role: "img" }, container);
+  return { svg, w, h };
+}
+
+/* ---------- tooltip ---------- */
+const tip = document.getElementById("tip");
+function showTip(evt, html) {
+  tip.innerHTML = html; tip.style.opacity = 1;
+  const r = tip.getBoundingClientRect(); let x = evt.clientX + 14, y = evt.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = evt.clientX - r.width - 14;
+  if (y + r.height > innerHeight - 8) y = evt.clientY - r.height - 14;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip() { tip.style.opacity = 0; }
+function hoverable(node, html) {
+  node.style.cursor = "default";
+  node.addEventListener("mousemove", e => showTip(e, html));
+  node.addEventListener("mouseleave", hideTip);
+  node.addEventListener("touchstart", e => { showTip(e.touches[0], html); }, { passive: true });
+}
+
+/* ---------- axes ---------- */
+function xAxis(svg, sx, ticks, y, x0, x1, fmt, title, h) {
+  const g = el("g", { class: "axis" }, svg);
+  el("line", { x1: x0, x2: x1, y1: y, y2: y }, g, { stroke: "var(--border)" });
+  ticks.forEach(t => {
+    el("line", { x1: sx(t), x2: sx(t), y1: 12, y2: y }, g, { stroke: "var(--grid)", strokeWidth: 1 });
+    const tx = el("text", { x: sx(t), y: y + 16, "text-anchor": "middle" }, g); tx.textContent = fmt(t);
+  });
+  if (title) { const tt = el("text", { x: (x0 + x1) / 2, y: h - 4, "text-anchor": "middle", class: "axis-title" }, svg); tt.textContent = title; }
+}
+function yAxis(svg, sy, ticks, x0, x1, fmt, title) {
+  const g = el("g", { class: "axis" }, svg);
+  ticks.forEach(t => {
+    el("line", { x1: x0, x2: x1, y1: sy(t), y2: sy(t) }, g, { stroke: "var(--grid)" });
+    const tx = el("text", { x: x0 - 8, y: sy(t) + 4, "text-anchor": "end" }, g); tx.textContent = fmt(t);
+  });
+  if (title) { const tt = el("text", { transform: `translate(12 ${(sy.range0 + sy.range1) / 2}) rotate(-90)`, "text-anchor": "middle", class: "axis-title" }, svg); tt.textContent = title; }
+}
+
+/* ---------- chart: horizontal interval (dot + whisker) ---------- */
+function intervalChart(container, rows, { fmt, xTitle, rowH = 44, labelW = 110, zero = true, valueLabel = true }) {
+  const h = rows.length * rowH + 54;
+  const { svg, w } = svgFor(container, h);
+  const x0 = labelW, x1 = w - (valueLabel ? 74 : 16);
+  const vals = rows.flatMap(r => [r.lo, r.hi, r.v]).concat(zero ? [0] : []);
+  let lo = Math.min(...vals), hi = Math.max(...vals); const pad = (hi - lo) * 0.06; lo -= pad; hi += pad;
+  if (zero && lo > 0) lo = 0;
+  const ticks = niceTicks(lo, hi, Math.max(3, Math.floor((x1 - x0) / 80)));
+  lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length - 1]);
+  const sx = lin(lo, hi, x0, x1);
+  xAxis(svg, sx, ticks, h - 40, x0, x1, fmt, xTitle, h);
+  if (zero && lo < 0) el("line", { x1: sx(0), x2: sx(0), y1: 8, y2: h - 40 }, svg, { stroke: "var(--text-3)" });
+  rows.forEach((r, i) => {
+    const y = 14 + i * rowH + rowH / 2 - 6;
+    if (r.label) { const t = el("text", { x: 0, y: y + 4, class: "ann-muted" }, svg); t.textContent = r.label; }
+    el("line", { x1: sx(r.lo), x2: sx(r.hi), y1: y, y2: y }, svg, { stroke: r.color, strokeWidth: 2.5, strokeLinecap: "round" });
+    el("circle", { cx: sx(r.v), cy: y, r: 5.5 }, svg, { fill: r.color, stroke: "var(--surface)", strokeWidth: 2 });
+    if (valueLabel) { const t = el("text", { x: sx(r.hi) + 8, y: y + 4, class: "ann" }, svg); t.textContent = fmt(r.v); }
+    const hit = el("rect", { x: x0, y: y - rowH / 2 + 4, width: x1 - x0 + 70, height: rowH - 8 }, svg, { fill: "transparent" });
+    hoverable(hit, r.tip);
+  });
+}
+
+/* ---------- chart: lollipop ---------- */
+function balanceChart() {
+  const c = document.getElementById("balanceChart");
+  const rows = [...DATA.balance].sort((a, b) => Math.abs(b.smd) - Math.abs(a.smd));
+  const rowH = 20, h = rows.length * rowH + 60;
+  const { svg, w } = svgFor(c, h);
+  const x0 = 40, x1 = w - 16, maxV = Math.max(0.12, ...rows.map(r => Math.abs(r.smd)) ) * 1.08;
+  const sx = lin(0, maxV, x0, x1);
+  xAxis(svg, sx, niceTicks(0, maxV, 5), h - 40, x0, x1, v => v.toFixed(2), "|SMD|", h);
+  el("line", { x1: sx(0.1), x2: sx(0.1), y1: 4, y2: h - 40 }, svg, { stroke: "var(--text-2)", strokeDasharray: "4 3" });
+  const lt = el("text", { x: sx(0.1) - 4, y: 12, "text-anchor": "end", class: "ann-muted" }, svg); lt.textContent = "0.1 threshold";
+  rows.forEach((r, i) => {
+    const y = 22 + i * rowH, v = Math.abs(r.smd);
+    const t = el("text", { x: 0, y: y + 4, class: "ann-muted" }, svg); t.textContent = r.feature;
+    el("line", { x1: sx(0), x2: sx(v), y1: y, y2: y }, svg, { stroke: "var(--grid)", strokeWidth: 2 });
+    el("circle", { cx: sx(v), cy: y, r: 5 }, svg, { fill: v < 0.1 ? "var(--s1)" : "var(--s2)", stroke: "var(--surface)", strokeWidth: 2 });
+    const hit = el("rect", { x: 0, y: y - rowH / 2, width: w, height: rowH }, svg, { fill: "transparent" });
+    hoverable(hit, `<b>${r.feature}</b><br>SMD ${r.smd >= 0 ? "+" : ""}${r.smd.toFixed(4)}<br>Variance ratio ${r.vr.toFixed(3)}<br>Welch p ${pval(r.p)}`);
+  });
+  document.getElementById("balanceTable").innerHTML = table(["Feature", "SMD", "Var. ratio", "Welch p"],
+    DATA.balance.map(r => [r.feature, r.smd.toFixed(4), r.vr.toFixed(3), pval(r.p)]));
+}
+
+/* ---------- chart: multi-series line ---------- */
+function lineChart(container, { series, markers = [], refs = [], xLog, yLog, xReverse, xFmt, yFmt, xTitle, yTitle, yMin, yMax, xTicks, tipFmt, h = 280, annotate = [] }) {
+  const { svg, w } = svgFor(container, h);
+  const m = { l: 54, r: 14, t: 12, b: 48 };
+  const xs = series.flatMap(s => s.points.map(p => p[0])), ys = series.flatMap(s => s.points.map(p => p[1])).concat(markers.map(p => p.y));
+  let xlo = Math.min(...xs), xhi = Math.max(...xs);
+  let ylo = yMin ?? Math.min(...ys), yhi = yMax ?? Math.max(...ys) * (yLog ? 1.3 : 1.05);
+  refs.forEach(r => { if (yMax == null) yhi = Math.max(yhi, r.y * 1.15); if (yMin == null) ylo = Math.min(ylo, r.y * 0.8); });
+  const X = xLog ? logS : lin, Y = yLog ? logS : lin;
+  const sx = xReverse ? X(xlo, xhi, w - m.r, m.l) : X(xlo, xhi, m.l, w - m.r);
+  const yt = yLog ? logTicks(ylo, yhi) : niceTicks(ylo, yhi, 5);
+  if (!yLog) { ylo = Math.min(ylo, yt[0]); yhi = Math.max(yhi, yt[yt.length - 1]); }
+  const sy = Y(ylo, yhi, h - m.b, m.t); sy.range0 = h - m.b; sy.range1 = m.t;
+  yAxis(svg, sy, yt, m.l, w - m.r, yFmt, yTitle);
+  const xt = xTicks || (xLog ? logTicks(xlo, xhi) : niceTicks(xlo, xhi, 5));
+  const g = el("g", { class: "axis" }, svg);
+  el("line", { x1: m.l, x2: w - m.r, y1: h - m.b, y2: h - m.b }, g, { stroke: "var(--border)" });
+  const minGap = 34; let lastX = -1e9;
+  xt.forEach(t => { const px = sx(t); if (Math.abs(px - lastX) < minGap) return; lastX = px; const tx = el("text", { x: px, y: h - m.b + 16, "text-anchor": "middle" }, g); tx.textContent = xFmt(t); });
+  const tt = el("text", { x: (m.l + w - m.r) / 2, y: h - 4, "text-anchor": "middle", class: "axis-title" }, svg); tt.textContent = xTitle;
+  refs.forEach(r => {
+    el("line", { x1: m.l, x2: w - m.r, y1: sy(r.y), y2: sy(r.y) }, svg, { stroke: r.color, strokeDasharray: "4 3", strokeWidth: 1.2 });
+    if (r.label) { const t = el("text", { x: w - m.r - 4, y: sy(r.y) - 5, "text-anchor": "end", class: "ann-muted" }, svg); t.textContent = r.label; }
+  });
+  series.forEach(s => {
+    const d = s.points.filter(p => !yLog || p[1] > 0).map((p, i) => (i ? "L" : "M") + sx(p[0]).toFixed(1) + " " + sy(Math.min(Math.max(p[1], ylo), yhi)).toFixed(1)).join("");
+    el("path", { d, fill: "none" }, svg, { stroke: s.color, strokeWidth: s.width || 2, strokeDasharray: s.dash || "", strokeLinejoin: "round" });
+  });
+  markers.forEach(p => {
+    el("circle", { cx: sx(p.x), cy: sy(Math.max(p.y, ylo)), r: 5.5 }, svg, { fill: "var(--surface)", stroke: p.color, strokeWidth: 2 });
+  });
+  annotate.forEach(a => {
+    el("circle", { cx: sx(a.x), cy: sy(a.y), r: 5 }, svg, { fill: a.color, stroke: "var(--surface)", strokeWidth: 2 });
+    const t = el("text", { x: sx(a.x) + (a.dx ?? 8), y: sy(a.y) + (a.dy ?? 16), class: "ann", "text-anchor": a.anchor || "start" }, svg); t.textContent = a.text;
+  });
+  // crosshair
+  const cross = el("line", { y1: m.t, y2: h - m.b }, svg, { stroke: "var(--text-3)", strokeWidth: 1, opacity: 0 });
+  const dots = series.filter(s => !s.noTip).map(s => el("circle", { r: 4 }, svg, { fill: s.color, stroke: "var(--surface)", strokeWidth: 2, opacity: 0 }));
+  const overlay = el("rect", { x: m.l, y: m.t, width: w - m.l - m.r, height: h - m.t - m.b }, svg, { fill: "transparent" });
+  const move = (evt, cx) => {
+    const pt = svg.createSVGPoint(); pt.x = cx.clientX; pt.y = cx.clientY;
+    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const tipSeries = series.filter(s => !s.noTip);
+    const near = tipSeries.map(s => s.points.reduce((b, p) => Math.abs(sx(p[0]) - loc.x) < Math.abs(sx(b[0]) - loc.x) ? p : b));
+    const xv = near[0][0];
+    cross.setAttribute("x1", sx(xv)); cross.setAttribute("x2", sx(xv)); cross.style.opacity = 1;
+    near.forEach((p, i) => { dots[i].setAttribute("cx", sx(p[0])); dots[i].setAttribute("cy", sy(Math.min(Math.max(p[1], ylo), yhi))); dots[i].style.opacity = 1; });
+    showTip(cx, tipFmt(xv, near, tipSeries));
+  };
+  overlay.addEventListener("mousemove", e => move(e, e));
+  overlay.addEventListener("touchmove", e => move(e, e.touches[0]), { passive: true });
+  overlay.addEventListener("mouseleave", () => { hideTip(); cross.style.opacity = 0; dots.forEach(d => d.style.opacity = 0); });
+}
+
+/* ---------- chart: bars with CI (+ optional predicted diamonds) ---------- */
+function barChart(container, rows, { color, fmt, yTitle, xTitle, h = 260, predicted = false }) {
+  const { svg, w } = svgFor(container, h);
+  const m = { l: 58, r: 12, t: 12, b: 48 };
+  const vals = rows.flatMap(r => [r.lo, r.hi, r.v, predicted ? r.pred : r.v, 0]);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const yt = niceTicks(lo, hi, 5); lo = Math.min(lo, yt[0]); hi = Math.max(hi, yt[yt.length - 1]);
+  const sy = lin(lo, hi, h - m.b, m.t); sy.range0 = h - m.b; sy.range1 = m.t;
+  yAxis(svg, sy, yt, m.l, w - m.r, fmt, yTitle);
+  const bw = (w - m.l - m.r) / rows.length;
+  el("line", { x1: m.l, x2: w - m.r, y1: sy(0), y2: sy(0) }, svg, { stroke: "var(--text-3)" });
+  rows.forEach((r, i) => {
+    const cx = m.l + bw * (i + 0.5), wBar = Math.min(44, bw * 0.62);
+    const y0 = sy(0), y1 = sy(r.v);
+    const top = Math.min(y0, y1), height = Math.max(1, Math.abs(y0 - y1));
+    const rad = Math.min(4, height / 2, wBar / 2);
+    // rounded data-end, square baseline end
+    const x = cx - wBar / 2, up = r.v >= 0;
+    const d = up
+      ? `M${x} ${y0}V${top + rad}Q${x} ${top} ${x + rad} ${top}H${x + wBar - rad}Q${x + wBar} ${top} ${x + wBar} ${top + rad}V${y0}Z`
+      : `M${x} ${y0}V${top + height - rad}Q${x} ${top + height} ${x + rad} ${top + height}H${x + wBar - rad}Q${x + wBar} ${top + height} ${x + wBar} ${top + height - rad}V${y0}Z`;
+    el("path", { d }, svg, { fill: color });
+    el("line", { x1: cx, x2: cx, y1: sy(r.lo), y2: sy(r.hi) }, svg, { stroke: "var(--text)", strokeWidth: 1.2 });
+    [r.lo, r.hi].forEach(v => el("line", { x1: cx - 4, x2: cx + 4, y1: sy(v), y2: sy(v) }, svg, { stroke: "var(--text)", strokeWidth: 1.2 }));
+    if (predicted) {
+      const py = sy(Math.min(Math.max(r.pred, lo), hi));
+      el("rect", { x: cx - 4.5, y: py - 4.5, width: 9, height: 9, transform: `rotate(45 ${cx} ${py})` }, svg, { fill: "var(--surface)", stroke: "var(--text)", strokeWidth: 1.5 });
+    }
+    const t = el("text", { x: cx, y: h - m.b + 16, "text-anchor": "middle", class: "axis" }, svg); t.textContent = r.label; t.style.fill = "var(--text-3)"; t.style.fontSize = "11px";
+    const hit = el("rect", { x: cx - bw / 2, y: m.t, width: bw, height: h - m.t - m.b }, svg, { fill: "transparent" });
+    hoverable(hit, r.tip);
+  });
+  const tt = el("text", { x: (m.l + w - m.r) / 2, y: h - 4, "text-anchor": "middle", class: "axis-title" }, svg); tt.textContent = xTitle;
+}
+
+function table(head, rows) {
+  return "<table><thead><tr>" + head.map(h => `<th>${h}</th>`).join("") + "</tr></thead><tbody>" +
+    rows.map(r => "<tr>" + r.map(c => `<td>${c}</td>`).join("") + "</tr>").join("") + "</tbody></table>";
+}
+function segButtons(id, onChange, initial) {
+  const box = document.getElementById(id);
+  box.innerHTML = M.map(m => `<button type="button" data-m="${m}" aria-pressed="${m === initial}">${cap(m)}</button>`).join("");
+  box.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    box.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); onChange(b.dataset.m);
+  }));
+}
+
+/* ================= sections ================= */
+function renderKPIs() {
+  const a = DATA.ab, c = DATA.cace, u = DATA.uplift;
+  const k = [
+    { label: "Visit lift (ITT)", value: spct(a.visit.rel), sub: `95% CI ${spct(a.visit.rel_ci[0])} to ${spct(a.visit.rel_ci[1])}` },
+    { label: "Conversion lift (ITT)", value: spct(a.conversion.rel), sub: `95% CI ${spct(a.conversion.rel_ci[0])} to ${spct(a.conversion.rel_ci[1])}` },
+    { label: "Visit effect if the ad is seen", value: pp(c.visit.cace, 1), sub: `${pct(c.visit.rate_without_ad)} → ${pct(c.visit.rate_exposed)} for exposed users` },
+    { label: "Conversions kept, top 30% targeted", value: pct(u.conversion.capture["30%"], 0), sub: `95% CI ${pct(u.conversion.capture_ci["30%"][0], 0)}–${pct(u.conversion.capture_ci["30%"][1], 0)} · random: 30%` },
+  ];
+  document.getElementById("kpis").innerHTML = k.map(x => `<div class="kpi"><div class="label">${x.label}</div><div class="value">${x.value}</div><div class="sub">${x.sub}</div></div>`).join("");
+}
+
+function renderSRM() {
+  const s = DATA.srm, P = DATA.profile, ok = !s.srm_detected;
+  document.getElementById("srm").innerHTML = `
+    <span class="pill ${ok ? "good" : "warn"}">${ok ? "✓ No sample ratio mismatch" : "⚠ SRM detected"}</span>
+    <dl class="stat-list">
+      <dt>Users</dt><dd>${int(P.n)}</dd>
+      <dt>Treatment</dt><dd>${int(s.n_treatment)} (${(s.observed_share * 100).toFixed(4)}%)</dd>
+      <dt>Control</dt><dd>${int(s.n_control)} (${((1 - s.observed_share) * 100).toFixed(4)}%)</dd>
+      <dt>Designed split</dt><dd>${pct(s.design_share, 0)} : ${pct(1 - s.design_share, 0)}</dd>
+      <dt>χ², p-value</dt><dd>${s.chi2.toExponential(2)}, p = ${pval(s.p_value)}</dd>
+    </dl>
+    <ul class="bullets">
+      <li>Data quality: <strong>${int(P.nulls)}</strong> missing values, <strong>${int(P.control_exposed)}</strong> control users exposed to an ad.</li>
+      <li>A near-perfect split (p ≈ 1) most likely reflects how the public dataset was sampled, not an unusually precise randomizer.</li>
+      <li>All Welch t-tests on features are "significant" at this sample size, so balance is judged by effect size (SMD), not p-values.</li>
+    </ul>`;
+}
+
+function renderAB() {
+  const a = DATA.ab, rows = [];
+  M.forEach(m => {
+    const r = a[m];
+    rows.push({ label: cap(m), v: r.rel, lo: r.rel_ci[0], hi: r.rel_ci[1], color: "var(--s1)",
+      tip: `<b>${cap(m)} · z-test</b><br>Lift ${spct(r.rel, 2)}<br>95% CI ${spct(r.rel_ci[0], 2)} to ${spct(r.rel_ci[1], 2)}` });
+    rows.push({ label: "", v: r.rel, lo: r.rel_ci_boot[0], hi: r.rel_ci_boot[1], color: "var(--s2)",
+      tip: `<b>${cap(m)} · bootstrap</b><br>Lift ${spct(r.rel, 2)}<br>95% CI ${spct(r.rel_ci_boot[0], 2)} to ${spct(r.rel_ci_boot[1], 2)}` });
+  });
+  intervalChart(document.getElementById("liftChart"), rows, { fmt: v => spct(v, 0), xTitle: "Relative lift vs control, 95% CI", rowH: 34, labelW: 90 });
+  document.getElementById("abTable").innerHTML = table(["Metric", "Control", "Treatment", "Abs. lift", "Rel. lift", "p-value"],
+    M.map(m => { const r = a[m]; return [cap(m), pct(r.rate_c, 3), pct(r.rate_t, 3), pp(r.abs, 3), spct(r.rel, 1), pval(r.p)]; }));
+  const nT = DATA.srm.n_treatment;
+  const wV = a.visit.rel_ci[1] - a.visit.rel_ci[0], wC = a.conversion.rel_ci[1] - a.conversion.rel_ci[0];
+  document.getElementById("abBullets").innerHTML = `
+    <li>≈ <strong>${big(a.visit.abs * nT)} incremental visits</strong> and <strong>${big(a.conversion.abs * nT)} incremental conversions</strong> across ${big(nT)} users assigned to see ads.</li>
+    <li>Conversion is ~${Math.round(a.visit.rate_c / a.conversion.rate_c)}× rarer than a visit, so its CI is ~${(wC / wV).toFixed(1)}× wider: visit is the sharper signal, conversion the business outcome.</li>
+    <li>Analytic and bootstrap intervals agree, so the normal approximation holds at this scale.</li>`;
+}
+
+function renderPower() {
+  const P = DATA.power, rows = P.rows;
+  const xt = [1, 0.5, 0.1, 0.05, 0.01, 0.005, 0.001].filter(v => v >= Math.min(...rows.map(r => r.f)) * 0.999);
+  const tipF = (xv, near, ss) => `<b>${trafficLabel(xv)} of traffic</b> · ${big(rows.find(r => r.f === xv)?.n ?? 0)} users<br>` + ss.map((s, i) => `${s.name}: ${pct(near[i][1], 1)}`).join("<br>");
+  lineChart(document.getElementById("mdeChart"), {
+    series: M.map(m => ({ name: `${cap(m)} MDE`, color: MC[m], points: rows.map(r => [r.f, r[m + "_mde"]]) })),
+    refs: M.map(m => ({ y: DATA.ab[m].rel, color: MC[m], label: `observed ${m} lift ${spct(DATA.ab[m].rel, 0)}` })),
+    xLog: true, yLog: true, xReverse: true, xTicks: xt, xFmt: trafficLabel, yFmt: v => (v * 100 >= 1 ? (v * 100).toFixed(0) : (v * 100).toFixed(1)) + "%",
+    xTitle: "Share of traffic in the test (log scale)", yTitle: "Relative MDE (log)", tipFmt: tipF,
+  });
+  lineChart(document.getElementById("powerChart"), {
+    series: M.map(m => ({ name: cap(m), color: MC[m], points: rows.map(r => [r.f, r[m + "_power"]]) })),
+    markers: P.empirical.flatMap(e => M.map(m => ({ x: e.f, y: e[m + "_emp"], color: MC[m] }))),
+    refs: [{ y: P.target, color: "var(--text-3)", label: `${pct(P.target, 0)} power target` }],
+    xLog: true, xReverse: true, xTicks: xt, yMin: 0, yMax: 1, xFmt: trafficLabel, yFmt: v => pct(v, 0),
+    xTitle: "Share of traffic in the test (log scale)", yTitle: "Power", tipFmt: (xv, near, ss) => {
+      const e = P.empirical.find(e => Math.abs(e.f - xv) < 1e-9);
+      return tipF(xv, near, ss) + (e ? `<br><i>Empirical (${e.k} buckets): visit ${pct(e.visit_emp, 1)}, conversion ${pct(e.conversion_emp, 1)}</i>` : "");
+    },
+  });
+  const full = rows[0], one = rows.find(r => Math.abs(r.f - 0.01) < 1e-9) || rows[rows.length - 1];
+  const minF = m => { const ok = rows.filter(r => r[m + "_power"] >= P.target); return ok.length ? Math.min(...ok.map(r => r.f)) : null; };
+  const A = P.allocation;
+  document.getElementById("powerBullets").innerHTML = `
+    <li>With all ${big(full.n)} users the test detects a <strong>${pct(full.visit_mde, 1)}</strong> lift in visits and <strong>${pct(full.conversion_mde, 1)}</strong> in conversions. The observed lifts are ${Math.round(DATA.ab.visit.rel / full.visit_mde)}× and ${Math.round(DATA.ab.conversion.rel / full.conversion_mde)}× larger.</li>
+    <li>At <strong>1% of traffic</strong> (${big(one.n)} users) power is ${pct(one.visit_power, 0)} for visits and ${pct(one.conversion_power, 0)} for conversions. Smallest share reaching ${pct(P.target, 0)} power: visit ${minF("visit") ? trafficLabel(minF("visit")) : "none"}, conversion ${minF("conversion") ? trafficLabel(minF("conversion")) : "none"}. Size a test for the rarest metric you must read.</li>
+    <li>The 85:15 split needs ~${(A.conversion.n_85_15 / A.conversion.n_50_50).toFixed(1)}× the users of 50:50 for the same power (${big(A.conversion.n_85_15)} vs ${big(A.conversion.n_50_50)} for conversion): the statistical price of a small holdout.</li>`;
+  document.getElementById("powerTable").innerHTML = table(["Traffic", "Users", "Visit MDE", "Visit power", "Conv. MDE", "Conv. power"],
+    rows.map(r => [trafficLabel(r.f), int(r.n), pct(r.visit_mde, 1), pct(r.visit_power, 1), pct(r.conversion_mde, 1), pct(r.conversion_power, 1)]));
+}
+
+function renderCACE() {
+  const C = DATA.cace;
+  document.getElementById("caceIntro").innerHTML = `Only <strong>${pct(C.compliance, 2)}</strong> of users assigned to treatment actually saw an ad, and no control user could. CACE = ITT ÷ exposure rate (Wald / instrumental-variable estimator with random assignment as the instrument) gives the effect for users who were exposed. Comparing exposed users with the control group directly is biased because exposure is not random.`;
+  M.forEach(m => {
+    const r = C[m], id = m === "visit" ? "caceVisit" : "caceConv";
+    intervalChart(document.getElementById(id), [
+      { label: "ITT", v: r.itt, lo: r.itt_ci[0], hi: r.itt_ci[1], color: "var(--s1)", tip: `<b>ITT · ${m}</b><br>${pp(r.itt, 3)} per assigned user<br>95% CI ${pp(r.itt_ci[0], 3)} to ${pp(r.itt_ci[1], 3)}` },
+      { label: "CACE", v: r.cace, lo: r.cace_ci[0], hi: r.cace_ci[1], color: "var(--s3)", tip: `<b>CACE · ${m}</b><br>${pp(r.cace, 2)} per exposed user<br>95% CI ${pp(r.cace_ci[0], 2)} to ${pp(r.cace_ci[1], 2)}<br>${pct(r.rate_without_ad, 2)} → ${pct(r.rate_exposed, 2)} (${spct(r.cace_rel, 0)})` },
+      { label: "Naive", v: r.naive, lo: r.naive_ci[0], hi: r.naive_ci[1], color: "var(--s2)", tip: `<b>Naive exposed − control · ${m}</b><br>${pp(r.naive, 2)}<br>${(r.naive / r.cace).toFixed(2)}× the causal estimate` },
+    ], { fmt: v => pp(v, m === "visit" ? 1 : 2), xTitle: "Effect on rate (percentage points)", rowH: 40, labelW: 56 });
+  });
+  const v = C.visit, c = C.conversion;
+  document.getElementById("caceBullets").innerHTML = `
+    <li>For users who saw an ad, the visit rate rose from an estimated <strong>${pct(v.rate_without_ad, 1)} to ${pct(v.rate_exposed, 1)}</strong> (${spct(v.cace_rel, 0)}); conversion from ${pct(c.rate_without_ad, 2)} to ${pct(c.rate_exposed, 2)} (${spct(c.cace_rel, 0)}).</li>
+    <li>The naive exposed-vs-control gap is <strong>${(v.naive / v.cace).toFixed(2)}×</strong> (visit) and <strong>${(c.naive / c.cace).toFixed(2)}×</strong> (conversion) the causal effect: exposed users were already more likely to visit.</li>
+    <li>Use ITT to decide on the campaign (value per targeted user) and CACE to judge the ad itself. CACE assumes the exclusion restriction: assignment affects outcomes only through exposure.</li>`;
+}
+
+let segMetric = "visit";
+function renderSegments() {
+  const sel = document.getElementById("featSel");
+  const feats = DATA.heterogeneity.filter(h => h.n_buckets > 1).map(h => h.feature);
+  if (!sel.options.length) {
+    sel.innerHTML = feats.map(f => `<option value="${f}">${f}</option>`).join("");
+    sel.addEventListener("change", renderSegments);
+    segButtons("segMetric", m => { segMetric = m; renderSegments(); }, segMetric);
+  }
+  const f = sel.value || feats[0], m = segMetric;
+  const rows = DATA.segments[f].slice().sort((a, b) => a.bucket - b.bucket);
+  const h = DATA.heterogeneity.find(x => x.feature === f);
+  const sig = h[m + "_p_bonf"] < 0.05;
+  document.getElementById("segStat").innerHTML = `Cochran's Q = ${int(h[m + "_Q"])}, Bonferroni p = ${pval(h[m + "_p_bonf"])} <span class="pill ${sig ? "good" : "warn"}">${sig ? "lift differs across buckets" : "no significant difference"}</span>`;
+  const total = rows.reduce((s, r) => s + r.n, 0);
+  barChart(document.getElementById("segChart"), rows.map(r => ({
+    label: `Q${r.bucket + 1} · ${Math.round(r.n / total * 100)}%`, v: r[m + "_lift"], lo: r[m + "_lift"] - 1.96 * r[m + "_se"], hi: r[m + "_lift"] + 1.96 * r[m + "_se"],
+    tip: `<b>${f} ${r.range}</b><br>${int(r.n)} users (${pct(r.n / total, 0)})<br>${cap(m)} rate ${pct(r[m + "_rate_c"], 3)} → ${pct(r[m + "_rate_t"], 3)}<br>Lift ${pp(r[m + "_lift"], 3)}<br>BH-adjusted p ${pval(r[m + "_p_bh"])}`,
+  })), { color: MC[m], fmt: v => pp(v, m === "visit" ? 1 : 2), yTitle: `${cap(m)} lift (pp)`, xTitle: "Quantile bucket · share of users" });
+  document.getElementById("segTable").innerHTML = table(["Bucket", "Range", "Users", "Control", "Treatment", "Lift", "BH p"],
+    rows.map(r => [`Q${r.bucket + 1}`, r.range, int(r.n), pct(r[m + "_rate_c"], 3), pct(r[m + "_rate_t"], 3), pp(r[m + "_lift"], 3), pval(r[m + "_p_bh"])]));
+}
+
+let decMetric = "visit";
+function renderTargeting() {
+  const U = DATA.uplift;
+  document.getElementById("targetIntro").innerHTML = `A T-learner (one LightGBM model for treated users, one for control; uplift = difference in predicted probability) trained on a ${big(DATA.sample_rows)}-user random sample and evaluated on held-out users. The Qini curve shows the share of all incremental outcomes kept when only the top-ranked users are targeted.`;
+  lineChart(document.getElementById("qiniChart"), {
+    series: [
+      ...M.map(m => ({ name: cap(m), color: MC[m], points: U[m].curve })),
+      { name: "Random", color: "var(--neutral)", dash: "5 4", width: 1.5, points: [[0, 0], [1, 1]], noTip: true },
+    ],
+    annotate: [{ x: 0.3, y: U.conversion.capture["30%"], color: "var(--s2)", text: `top 30% → ${pct(U.conversion.capture["30%"], 0)} of conversions`, dx: 10, dy: 18 }],
+    xFmt: v => pct(v, 0), yFmt: v => pct(v, 0), yMin: Math.min(0, ...M.flatMap(m => U[m].curve.map(p => p[1]))), xTitle: "Share of users targeted (ranked by predicted uplift)", yTitle: "Incremental outcomes kept",
+    tipFmt: (xv, near, ss) => `<b>Target top ${pct(xv, 0)}</b><br>` + ss.map((s, i) => `${s.name}: ${pct(near[i][1], 0)} of incremental`).join("<br>") + `<br>Random: ${pct(xv, 0)}`,
+  });
+  if (!document.getElementById("decMetric").children.length) segButtons("decMetric", m => { decMetric = m; renderDeciles(); }, decMetric);
+  renderDeciles();
+  const keys = ["10%", "20%", "30%", "50%"];
+  document.getElementById("captureTable").innerHTML = table(["Target only the top …", ...keys],
+    [...M.map(m => [`Incremental ${m}s kept`, ...keys.map(k => `${pct(U[m].capture[k], 0)} <span style="color:var(--text-3)">(${pct(U[m].capture_ci[k][0], 0)}–${pct(U[m].capture_ci[k][1], 0)})</span>`)]),
+     ["Random targeting", ...keys]]);
+  const dv = U.visit.deciles;
+  document.getElementById("targetBullets").innerHTML = `
+    <li><strong>Recommendation:</strong> show ads only to the ~30% of users with the highest predicted uplift. That keeps ${pct(U.conversion.capture["30%"], 0)} of incremental conversions and ${pct(U.visit.capture["30%"], 0)} of incremental visits for 30% of the ad spend.</li>
+    <li>Qini coefficient ${U.visit.qini_coef.toFixed(3)} (visit), ${U.conversion.qini_coef.toFixed(3)} (conversion); 0 = random ranking.</li>
+    <li>Use the model to rank users, not to read off absolute effects: top-decile predicted visit uplift is ${pp(dv[0].predicted_uplift, 1)} vs ${pp(dv[0].observed_uplift, 1)} observed. T-learner predictions are over-dispersed.</li>
+    <li>Multiple comparisons: many segment cuts were tested, so segments are treated as hypotheses; the targeting claim is validated on held-out users.</li>`;
+}
+function renderDeciles() {
+  const d = DATA.uplift[decMetric].deciles, m = decMetric;
+  document.getElementById("decSw").style.background = MC[m];
+  barChart(document.getElementById("decChart"), d.map(r => ({
+    label: String(r.decile), v: r.observed_uplift, lo: r.ci_lo, hi: r.ci_hi, pred: r.predicted_uplift,
+    tip: `<b>Decile ${r.decile}</b> (${int(r.n)} users)<br>Observed ${pp(r.observed_uplift, 3)}<br>95% CI ${pp(r.ci_lo, 3)} to ${pp(r.ci_hi, 3)}<br>Predicted ${pp(r.predicted_uplift, 3)}`,
+  })), { color: MC[m], fmt: v => pp(v, m === "visit" ? 1 : 2), yTitle: `${cap(m)} uplift (pp)`, xTitle: "Decile of predicted uplift (1 = highest)", predicted: true });
+}
+
+/* ---------- boot ---------- */
+function renderAll() {
+  renderKPIs(); renderSRM(); balanceChart(); renderAB(); renderPower(); renderCACE(); renderSegments(); renderTargeting();
+}
+const themeBtn = document.getElementById("themeBtn");
+themeBtn.addEventListener("click", () => {
+  const root = document.documentElement;
+  const cur = root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  root.dataset.theme = cur === "dark" ? "light" : "dark";
+});
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(renderAll, 120); });
+if (!DATA) document.querySelector(".wrap").insertAdjacentHTML("afterbegin", "<p>No data: run scripts/07_build_dashboard.py.</p>");
+else renderAll();
+</script>
+</body>
+</html>
